@@ -37,11 +37,38 @@ async function run() {
     
     await client.connect();
     
-      const db = client.db("eTuitionDB");
-      const studentsCollection = db.collection("students");
+      const db = client.db("eTuitionTrack_DB");
+      const usersCollection = db.collection("users");
+      const tuitionsCollection = db.collection("tuitions");
+      
+    // Users Related api's
+
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+      const email = req.body.email;
+      const isExist = await usersCollection.findOne({ email });
+
+      if (isExist) {
+        return res.send({ message: "User Alredy Exist!" });
+      } 
+        newUser.createdAt = new Date();
+        const result = await usersCollection.insertOne(newUser);
+        res.send(result);
       
       
-      
+    })
+
+
+    app.get("/users", async (req, res) => {
+      const email = req.query.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query)
+      res.send(result)
+    })
+    
+
+
+    // Tuitions Related api's
       
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
