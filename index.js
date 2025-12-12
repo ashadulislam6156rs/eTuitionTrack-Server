@@ -66,9 +66,41 @@ async function run() {
 
     app.get("/users", async (req, res) => {
       const email = req.query.email;
-      const query = { email };
-      const result = await usersCollection.findOne(query)
-      res.send(result)
+     
+      if (!email) {
+    const result = await usersCollection.find().toArray();
+    return res.send(result);
+  } 
+        const result = await usersCollection.findOne({email})
+        res.send(result)
+      
+      
+    })
+
+     app.patch("/user/:id/update", async (req, res) => {
+
+       const id = req.params.id;
+       const { fullName, photoURL, contactNumber, userRole} = req.body;
+       const query = { _id: new ObjectId(id) }
+       const updateInfo = {
+         fullName,
+         photoURL,
+         contactNumber,
+         userRole
+       }
+      const result = await usersCollection.updateOne(query, updateInfo);
+      res.send(result);
+      
+    })
+
+
+    app.delete("/user/:id/delete", async (req, res) => {
+
+       const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+      
     })
   
 
@@ -98,7 +130,17 @@ async function run() {
       })
     
     app.get("/tuitions/approved", async (req, res) => {
-      const result = await tuitionsCollection.find({tuitionStatus: "Approved"}).sort({createdAt: -1}).toArray();
+      const searchText = req.query.searchText; 
+      const sortBy = req.query.sortBy  || "createdAt";
+      const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+      const query = {tuitionStatus: "Approved"}
+      if (searchText) { query.$or = [
+          { subject: { $regex: searchText, $options: "i" } },
+          {location: {$regex: searchText, $options: "i"}}
+        ]
+      }
+      const result = await tuitionsCollection.find(query).sort({ [sortBy]: sortOrder }).toArray();
 
       res.send(result);
     })
@@ -183,13 +225,11 @@ async function run() {
 
     app.get("/tuition-requests", async (req, res) => {
       const email = req.query.email;
-      if (!email) {
-    return res.status(400).send({ message: "Email is required" });
-  }
       const  query = {studentEmail: email}
       const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
       res.send(result);
     })
+
 
     app.patch("/tuition-requests/:id", async (req, res) => {
       const id = req.params.id;
@@ -206,6 +246,38 @@ async function run() {
       res.send(result);
     })
 
+
+
+    // Tutor Related Api's
+
+     app.get("/tutor-applications", async (req, res) => {
+      const email = req.query.email;
+      const  query = {tutorEmail: email}
+      const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
+      res.send(result);
+     })
+    
+     app.delete("/tutor-applications/:id/delete", async (req, res) => {
+      const id = req.params.id;
+      const  query = {_id: new ObjectId(id)}
+      const result = await tuitionRequestsCollection.deleteOne(query)
+      res.send(result);
+     })
+    
+     app.patch("/tutor-applications/:id/update", async (req, res) => {
+       const id = req.params.id;
+       const { expectedSalary, experience, qualifications} = req.body;
+       const query = { _id: new ObjectId(id) }
+       const updateInfo = {
+         $set: {
+           expectedSalary,
+           experience,
+           qualifications
+         }
+       }
+      const result = await tuitionRequestsCollection.updateOne(query, updateInfo)
+      res.send(result);
+    })
 
 
     // Payment Related Api's
@@ -245,11 +317,9 @@ async function run() {
   res.send({url: session.url});
     });
     
-    // payment/success
-
+  // payment/success
  app.patch("/payment-success", async (req, res) => {
    const sessionId = req.query.session_id;
-  //  console.log(sessionId);
    
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
@@ -269,6 +339,8 @@ async function run() {
           $set: {
             tutorRequestStatus: "Approved",
             paymentStatus: "Paid",
+            paidAt: new Date(),
+            
           }
         }
         const result = await tuitionRequestsCollection.updateOne(query, update)
@@ -295,7 +367,21 @@ async function run() {
       
 
       res.send({success: false})
-   })
+ })
+    
+    
+    //payment History
+    app.get("/payment-history", async (req, res) => {
+      const email = req.query.email;
+      const query = {}
+
+      if (email) {
+        query.customerEmail = email;
+      }
+
+      const result = await paymentsCollection.find(query).toArray();
+      res.send(result)
+    })
     
     // Admin Related api's
     
