@@ -68,7 +68,7 @@ async function run() {
       const email = req.query.email;
      
       if (!email) {
-    const result = await usersCollection.find().toArray();
+    const result = await usersCollection.find().sort({createdAt: -1}).toArray();
     return res.send(result);
   } 
         const result = await usersCollection.findOne({email})
@@ -83,10 +83,28 @@ async function run() {
        const { fullName, photoURL, contactNumber, userRole} = req.body;
        const query = { _id: new ObjectId(id) }
        const updateInfo = {
-         fullName,
+         $set: {
+           fullName,
          photoURL,
          contactNumber,
          userRole
+         }
+       }
+      const result = await usersCollection.updateOne(query, updateInfo);
+      res.send(result);
+      
+     })
+    
+    
+    app.patch("/user/role/:id/update", async (req, res) => {
+
+       const id = req.params.id;
+       const { userRole} = req.body;
+       const query = { _id: new ObjectId(id) }
+       const updateInfo = {
+         $set: {
+         userRole
+         }
        }
       const result = await usersCollection.updateOne(query, updateInfo);
       res.send(result);
@@ -225,7 +243,10 @@ async function run() {
 
     app.get("/tuition-requests", async (req, res) => {
       const email = req.query.email;
-      const  query = {studentEmail: email}
+      const query = {}
+      if (email) {
+        query.studentEmail = email;
+      }
       const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
       res.send(result);
     })
