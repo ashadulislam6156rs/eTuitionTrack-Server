@@ -8,6 +8,17 @@ const app = express();
 //------> Server Port <------\\
 const port = process.env.PORT || 5000;
 
+
+// admin initialized
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./etuitiontrack-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
 //------> middleWare <------\\
 app.use(express.json());
 app.use(cors());
@@ -15,7 +26,27 @@ app.use(cors());
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 
+/// firebase Token varify
+const varyfyFBToken = async (req, res, next) => {
 
+  const token = req.headers.authorization;
+  if (!token) {
+    return res.status(401).send({message: "Unauthorized access!"})
+  }
+
+  try {
+    const tokenId = token.split(" ")[1];
+    
+    const decode = await admin.auth().verifyIdToken(tokenId);
+    req.decoded_email = decode.email;
+
+    next();
+     
+  } catch {
+     return res.status(401).send({message: "Unauthorized access!"})
+  }
+  
+}
 
 //------> Root api <------\\
 app.get("/", (req, res) => {
@@ -45,7 +76,23 @@ async function run() {
       const usersCollection = db.collection("users");
     const tuitionsCollection = db.collection("tuitions");
      const tuitionRequestsCollection = db.collection("tuitionRequests");
-     const paymentsCollection = db.collection("payments");
+    const paymentsCollection = db.collection("payments");
+    
+    // Varify Admin
+    
+//     const varifyAdmin = async (req, res, next) => {
+  
+//     const email = req.decoded_email;
+//     const query = {email}
+//     const user = await usersCollection.findOne(query);
+
+//     if (!user || user.role !== "Admin") {
+//       return res.status(403).send({ message: "Forbidden access!" });
+//     }
+
+//     next();
+  
+// }
       
     // Users Related api's
     app.post("/users", async (req, res) => {
@@ -66,18 +113,29 @@ async function run() {
 
     app.get("/users", async (req, res) => {
       const email = req.query.email;
-     
       if (!email) {
-    const result = await usersCollection.find().sort({createdAt: -1}).toArray();
+        const result = await usersCollection.find().sort({createdAt: -1}).toArray();
     return res.send(result);
-  } 
+     }
+      
         const result = await usersCollection.findOne({email})
         res.send(result)
       
       
     })
 
-     app.patch("/user/:id/update", async (req, res) => {
+
+
+     app.get("/users/tutor/role", async (req, res) => {
+
+       const result = await usersCollection.find({userRole: "Tutor"}).sort({createdAt: -1}).toArray();
+    return res.send(result);
+       
+      
+      
+    })
+
+     app.patch("/user/:id/update", varyfyFBToken, async (req, res) => {
 
        const id = req.params.id;
        const { fullName, photoURL, contactNumber, userRole} = req.body;
@@ -96,7 +154,7 @@ async function run() {
      })
     
     
-    app.patch("/user/role/:id/update", async (req, res) => {
+    app.patch("/user/role/:id/update", varyfyFBToken, async (req, res) => {
 
        const id = req.params.id;
        const { userRole} = req.body;
@@ -112,7 +170,7 @@ async function run() {
     })
 
 
-    app.delete("/user/:id/delete", async (req, res) => {
+    app.delete("/user/:id/delete", varyfyFBToken, async (req, res) => {
 
        const id = req.params.id;
       const query = { _id: new ObjectId(id) }
@@ -125,7 +183,7 @@ async function run() {
 
     // Tuitions Related api's
 
-      app.post("/tuitions", async (req, res) => {
+      app.post("/tuitions", varyfyFBToken, async (req, res) => {
         const newTuition = req.body;
         const studentEmail = req.body.studentEmail;
 
@@ -147,20 +205,34 @@ async function run() {
       
       })
     
-    app.get("/tuitions/approved", async (req, res) => {
+    app.get("/tuitions/approved",  async (req, res) => {
       const searchText = req.query.searchText; 
-      const sortBy = req.query.sortBy  || "createdAt";
-      const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+        const sortBy = req.query.sortBy || "createdAt";
+  const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 6;
+       const skip = (page - 1) * limit;
 
-      const query = {tuitionStatus: "Approved"}
+      const query = { tuitionStatus: "Approved" }
+      
       if (searchText) { query.$or = [
           { subject: { $regex: searchText, $options: "i" } },
           {location: {$regex: searchText, $options: "i"}}
         ]
       }
-      const result = await tuitionsCollection.find(query).sort({ [sortBy]: sortOrder }).toArray();
 
-      res.send(result);
+      const total = await tuitionsCollection.countDocuments(query);
+
+      const result = await tuitionsCollection.find(query).sort({ [sortBy]: sortOrder }).skip(skip)
+    .limit(limit).toArray();
+
+       res.send({
+    total,
+    page,
+    limit,
+    pages: Math.ceil(total / limit),
+    data:result,
+  });
     })
 
     app.get("/latest/tuitions", async (req, res) => {
@@ -168,14 +240,14 @@ async function run() {
       res.send(result);
     })
 
-    app.get("/tuitions/:id/details", async (req, res) => {
+    app.get("/tuitions/:id/details",  async (req, res) => {
       const id = req.params.id;
       const query = {_id: new ObjectId(id)}
       const result = await tuitionsCollection.findOne(query);
       res.send(result);
     })
 
-    app.get("/my-tuitions/approved", async (req, res) => {
+    app.get("/my-tuitions/approved", varyfyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -198,7 +270,7 @@ async function run() {
     // subjectImage,
     // studentEmail,
 
-     app.patch("/my-tuitions/:id/update", async (req, res) => {
+     app.patch("/my-tuitions/:id/update", varyfyFBToken, async (req, res) => {
        try {
          const id = req.params.id;
        const {budget, className, details, location, phone,scheduleTime,studentImage,studentName,subject,subjectImage,studentEmail} = req.body;
@@ -217,14 +289,14 @@ async function run() {
        }
      })
     
-    app.get("/my-tuitions/:id/update", async (req, res) => {
+    app.get("/my-tuitions/:id/update", varyfyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await tuitionsCollection.findOne(query);
       res.send(result);
     })
 
-    app.delete("/my-tuitions/:id/delete", async (req, res) => {
+    app.delete("/my-tuitions/:id/delete", varyfyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await tuitionsCollection.deleteOne(query);
@@ -233,7 +305,7 @@ async function run() {
 
     // Tuitions Requests Related api's
     
-    app.post("/tuition-requests", async (req, res) => {
+    app.post("/tuition-requests", varyfyFBToken, async (req, res) => {
       const newRequest = req.body;
       newRequest.createdAt = new Date();
       newRequest.tutorRequestStatus = "Pending"
@@ -241,7 +313,7 @@ async function run() {
       res.send(result);
     })
 
-    app.get("/tuition-requests", async (req, res) => {
+    app.get("/tuition-requests", varyfyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {}
       if (email) {
@@ -252,7 +324,7 @@ async function run() {
     })
 
 
-    app.patch("/tuition-requests/:id", async (req, res) => {
+    app.patch("/tuition-requests/:id", varyfyFBToken, async (req, res) => {
       const id = req.params.id;
       const tutorRequestStatus = req.body.tutorRequestStatus;
       const query = { _id: new ObjectId(id) }
@@ -271,21 +343,21 @@ async function run() {
 
     // Tutor Related Api's
 
-     app.get("/tutor-applications", async (req, res) => {
+     app.get("/tutor-applications", varyfyFBToken, async (req, res) => {
       const email = req.query.email;
       const  query = {tutorEmail: email}
       const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
       res.send(result);
      })
     
-     app.delete("/tutor-applications/:id/delete", async (req, res) => {
+     app.delete("/tutor-applications/:id/delete", varyfyFBToken, async (req, res) => {
       const id = req.params.id;
       const  query = {_id: new ObjectId(id)}
       const result = await tuitionRequestsCollection.deleteOne(query)
       res.send(result);
      })
     
-     app.patch("/tutor-applications/:id/update", async (req, res) => {
+     app.patch("/tutor-applications/:id/update", varyfyFBToken, async (req, res) => {
        const id = req.params.id;
        const { expectedSalary, experience, qualifications} = req.body;
        const query = { _id: new ObjectId(id) }
@@ -303,7 +375,7 @@ async function run() {
 
     // Payment Related Api's
 
-    app.post('/create-checkout-session', async (req, res) => {
+    app.post('/create-checkout-session', varyfyFBToken, async (req, res) => {
       const paymentInfo = req.body;
     //  const amount = (Math.round(Number(paymentInfo?.expectedSalary) / 128)) * 100;
       const amount = Number(paymentInfo?.expectedSalary) * 100;
@@ -339,7 +411,7 @@ async function run() {
     });
     
   // payment/success
- app.patch("/payment-success", async (req, res) => {
+ app.patch("/payment-success", varyfyFBToken, async (req, res) => {
    const sessionId = req.query.session_id;
    
       const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -392,7 +464,7 @@ async function run() {
     
     
     //payment History
-    app.get("/payment-history", async (req, res) => {
+    app.get("/payment-history", varyfyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {}
 
@@ -406,13 +478,13 @@ async function run() {
     
     // Admin Related api's
     
-    app.get("/tuitions", async (req, res) => {
+    app.get("/tuitions", varyfyFBToken, async (req, res) => {
       const result = await tuitionsCollection.find().sort({createdAt: -1}).toArray();
 
       res.send(result);
     })
 
-    app.patch("/tuitions/:id/tuitionStatus", async (req, res) => {
+    app.patch("/tuitions/:id/tuitionStatus", varyfyFBToken, async (req, res) => {
       const id = req.params.id;
       const tuitionStatus = req.body.tuitionStatus;
 
