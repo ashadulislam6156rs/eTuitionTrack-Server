@@ -113,6 +113,9 @@ async function run() {
 
     app.get("/users", async (req, res) => {
       const email = req.query.email;
+
+      console.log(email);
+      
       if (!email) {
         const result = await usersCollection.find().sort({createdAt: -1}).toArray();
     return res.send(result);
@@ -124,32 +127,41 @@ async function run() {
       
     })
 
-
-
-     app.get("/users/tutor/role", async (req, res) => {
-
-       const result = await usersCollection.find({userRole: "Tutor"}).sort({createdAt: -1}).toArray();
-    return res.send(result);
-       
-      
-      
-    })
-
      app.patch("/user/:id/update", varyfyFBToken, async (req, res) => {
 
        const id = req.params.id;
-       const { fullName, photoURL, contactNumber, userRole} = req.body;
+       const { fullName, photoURL, contactNumber, userRole, address} = req.body;
        const query = { _id: new ObjectId(id) }
-       const updateInfo = {
+
+       if (!userRole) {
+         const updateInfo = {
+         $set: {
+         fullName,
+         photoURL,
+         contactNumber,
+         address,
+         }
+       }
+
+     const result = await usersCollection.updateOne(query, updateInfo);
+         res.send(result);
+         
+       }
+
+       if (!address) {
+        const updateInfo = {
          $set: {
            fullName,
          photoURL,
          contactNumber,
-         userRole
+         userRole,
          }
        }
+
       const result = await usersCollection.updateOne(query, updateInfo);
       res.send(result);
+      }
+       
       
      })
     
@@ -350,6 +362,22 @@ async function run() {
       res.send(result);
      })
     
+     app.get("/users/tutor/role", async (req, res) => {
+
+       const result = await usersCollection.find({userRole: "Tutor"}).sort({createdAt: -1}).toArray();
+    return res.send(result);
+       
+      
+      
+     })
+    
+      app.get("/users/tutor/latest", async (req, res) => {
+
+       const result = await usersCollection.find({userRole: "Tutor"}).sort({createdAt: -1}).limit(8).toArray();
+    return res.send(result);
+ 
+    })
+    
      app.delete("/tutor-applications/:id/delete", varyfyFBToken, async (req, res) => {
       const id = req.params.id;
       const  query = {_id: new ObjectId(id)}
@@ -502,8 +530,7 @@ async function run() {
       const result = await tuitionsCollection.updateOne(query, updateInfo)
       res.send(result);
 
-    })
-
+    }) 
 
       
     await client.db("admin").command({ ping: 1 });
