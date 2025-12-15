@@ -216,36 +216,53 @@ async function run() {
       
       
       })
-    
-    app.get("/tuitions/approved",  async (req, res) => {
-      const searchText = req.query.searchText; 
-        const sortBy = req.query.sortBy || "createdAt";
-  const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 6;
-       const skip = (page - 1) * limit;
 
-      const query = { tuitionStatus: "Approved" }
-      
-      if (searchText) { query.$or = [
-          { subject: { $regex: searchText, $options: "i" } },
-          {location: {$regex: searchText, $options: "i"}}
-        ]
-      }
+  
+  
+  app.get("/tuitions/approved", async (req, res) => {
+  const searchText = req.query.searchText;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 8;
+  const skip = (page - 1) * limit;
+  const sortBy = req.query.sortBy || "latest";
 
-      const total = await tuitionsCollection.countDocuments(query);
+  const query = { tuitionStatus: "Approved" };
 
-      const result = await tuitionsCollection.find(query).sort({ [sortBy]: sortOrder }).skip(skip)
-    .limit(limit).toArray();
+  if (searchText) {
+    query.$or = [
+      { subject: { $regex: searchText, $options: "i" } },
+      { location: { $regex: searchText, $options: "i" } },
+    ];
+  }
 
-       res.send({
+
+  let sortOption = {};
+  if (sortBy === "high") {
+    sortOption = { budget: -1 };
+  } else if (sortBy === "low") {
+    sortOption = { budget: 1 };
+  } else {
+    sortOption = { createdAt: -1 };
+  }
+
+  const total = await tuitionsCollection.countDocuments(query);
+
+  const result = await tuitionsCollection
+    .find(query)
+    .sort(sortOption)
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+
+  res.send({
     total,
     page,
     limit,
     pages: Math.ceil(total / limit),
-    data:result,
+    data: result,
   });
-    })
+});
+
 
     app.get("/latest/tuitions", async (req, res) => {
       const result = await tuitionsCollection.find({tuitionStatus: "Approved"}).sort({createdAt: -1}).limit(8).toArray();
@@ -362,14 +379,27 @@ async function run() {
       res.send(result);
      })
     
-     app.get("/users/tutor/role", async (req, res) => {
-
-       const result = await usersCollection.find({userRole: "Tutor"}).sort({createdAt: -1}).toArray();
-    return res.send(result);
+    app.get("/users/tutor/role", async (req, res) => {
        
+       const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 6;
+      const skip = (page - 1) * limit;
+      const query = {userRole: "Tutor"}
       
+      const total = await usersCollection.countDocuments(query);
+       const result = await usersCollection.find(query).sort({createdAt: -1}).skip(skip)
+        .limit(limit).toArray();
       
-     })
+       res.send({
+    total,
+    page,
+    limit,
+    pages: Math.ceil(total / limit),
+    data:result,
+  });
+  
+    })
+    
     
       app.get("/users/tutor/latest", async (req, res) => {
 
