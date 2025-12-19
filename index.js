@@ -32,7 +32,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 /// firebase Token varify
 const varyfyFBToken = async (req, res, next) => {
-    console.log("Token: " + req.headers.authorization);
+   
   const token = req.headers.authorization;
   if (!token) {
     return res.status(401).send({message: "Unauthorized access!"})
@@ -99,7 +99,7 @@ async function run() {
       
     // Varify Student
     const varifyStudent = async (req, res, next) => {
-  console.log("Student: " + req.decoded_email);
+      
     const email = req.decoded_email;
     const query = {email}
       const user = await usersCollection.findOne(query);
