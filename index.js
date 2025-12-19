@@ -253,6 +253,7 @@ async function run() {
     query.$or = [
       { subject: { $regex: searchText, $options: "i" } },
       { location: { $regex: searchText, $options: "i" } },
+      { className: { $regex: searchText, $options: "i" } },
     ];
   }
 
@@ -388,6 +389,15 @@ async function run() {
      app.get("/tutor-applications", varyfyFBToken, varifyTutor, async (req, res) => {
       const email = req.query.email;
       const  query = {tutorEmail: email}
+      const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
+      res.send(result);
+     })
+    
+    app.get("/ongoing-tuitions/approved", varyfyFBToken, varifyTutor, async (req, res) => {
+      const email = req.query.email;
+      const query = { tutorEmail: email, tutorRequestStatus: "Approved" }
+      console.log(query);
+      
       const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
       res.send(result);
      })
