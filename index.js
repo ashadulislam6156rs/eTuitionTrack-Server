@@ -28,7 +28,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 /// firebase Token varify
 const varyfyFBToken = async (req, res, next) => {
-
+    console.log("Token: " + req.headers.authorization);
   const token = req.headers.authorization;
   if (!token) {
     return res.status(401).send({message: "Unauthorized access!"})
@@ -85,7 +85,7 @@ async function run() {
     const query = {email}
     const user = await usersCollection.findOne(query);
 
-    if (!user || user.role !== "Admin") {
+    if (!user || user?.userRole !== "Admin") {
       return res.status(403).send({ message: "Forbidden access!" });
     }
 
@@ -95,12 +95,12 @@ async function run() {
       
     // Varify Student
     const varifyStudent = async (req, res, next) => {
-  
+  console.log("Student: " + req.decoded_email);
     const email = req.decoded_email;
     const query = {email}
-    const user = await usersCollection.findOne(query);
+      const user = await usersCollection.findOne(query);
 
-    if (!user || user.role !== "Student") {
+    if (!user || user?.userRole !== "Student") {
       return res.status(403).send({ message: "Forbidden access!" });
     }
 
@@ -115,7 +115,7 @@ async function run() {
     const query = {email}
     const user = await usersCollection.findOne(query);
 
-    if (!user || user.role !== "Tutor") {
+    if (!user || user?.userRole !== "Tutor") {
       return res.status(403).send({ message: "Forbidden access!" });
     }
 
@@ -196,7 +196,7 @@ async function run() {
     
 
 
-    app.delete("/user/:id/delete", varyfyFBToken, async (req, res) => {
+    app.delete("/user/:id/delete", varyfyFBToken, varifyAdmin, async (req, res) => {
 
        const id = req.params.id;
       const query = { _id: new ObjectId(id) }
@@ -211,12 +211,15 @@ async function run() {
 
       app.post("/tuitions", varyfyFBToken, varifyStudent, async (req, res) => {
         const newTuition = req.body;
+        
+        
         const studentEmail = req.body.studentEmail;
 
          if (!studentEmail) {
       return res.status(400).send({ message: "studentEmail is required" });
     }
         const user = await usersCollection.findOne({ email: studentEmail });
+
         if (!user) {
           return res.status(404).send({ message: "Student not found" });
         }
@@ -292,7 +295,7 @@ async function run() {
     })
 
     ///==========>
-    app.get("/my-tuitions/approved", varyfyFBToken, async (req, res) => {
+    app.get("/my-tuitions/approved", varyfyFBToken, varifyStudent, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -378,7 +381,7 @@ async function run() {
 
     // Tutor Related Api's
 
-     app.get("/tutor-applications", varyfyFBToken, async (req, res) => {
+     app.get("/tutor-applications", varyfyFBToken, varifyTutor, async (req, res) => {
       const email = req.query.email;
       const  query = {tutorEmail: email}
       const result = await tuitionRequestsCollection.find(query).sort({createdAt: -1}).toArray();
@@ -511,7 +514,6 @@ async function run() {
           currency: session.currency,
           customerEmail: session.customer_email,
           tuitionId: session.metadata.tuitionId,
-          subjectName: session.metadata.subjectName,
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
           paidAt: new Date(),
@@ -547,7 +549,7 @@ async function run() {
     // Admin Related api's
     
     ////=============>
-    app.get("/tuitions", varyfyFBToken, async (req, res) => {
+    app.get("/tuitions", varyfyFBToken, varifyAdmin, async (req, res) => {
       const result = await tuitionsCollection.find().sort({createdAt: -1}).toArray();
       res.send(result);
     })
